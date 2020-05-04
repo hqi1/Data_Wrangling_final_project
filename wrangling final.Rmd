@@ -1,0 +1,213 @@
+---
+title: "Data Wrangling Final Report"
+author: "Hang Qi"
+date: "2020/4/24"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning = FALSE,echo = FALSE)
+```
+My final project for Data Wrangling is to analyse NBA data and do some data visualization.
+```{r include=FALSE}
+library(dplyr)
+library(magrittr)
+library(ggplot2)
+library(rvest)
+```
+The first dataset is downloaded from the website https://www.kaggle.com/dansbecker/nba-shot-logs/data
+The table below is the first 6 rows of my dataset
+```{r}
+data_2014<-read.csv("shot_logs.csv")
+head(data_2014)
+```
+```{r}
+nrow(data_2014)
+ncol(data_2014)
+```
+There are 21 variables and 128069 observations in this dataset.
+128069 observations means that there are 128069 shots attempted in the dataset.
+
+
+I will explain some variables for further analysis:
+LOCATION: H means home team, A means away team
+W: W means win, L means lose
+FINAL_MARGIN: final score difference at the end of game
+SHOT_DIST: shotting distance from basket
+PTS_TPYE: two-pointer or three pointer(no free throw included)
+
+The first goal of my project is to visualize top 5 score players in the dataset 
+
+After deeply looking at this table, I decide to create a new table which is grouped by player and this can make it easier to analyse
+```{r}
+player_table<-data_2014%>%
+  group_by(player_name)%>%
+  summarise(shots_num=n(),
+            made_num=sum(FGM),
+            points=sum(FGM*PTS_TYPE))
+```
+
+```{r}
+head(player_table)
+```
+```{r}
+score_top10<-player_table%>%
+  arrange(-player_table$points)
+score_top10<-score_top10[1:10,]
+score_top10
+```
+The players table above is for top 5 score in the dataset
+I found that the highest total score is 1130 which is from player Stephen Curry, and I realized that the data from kaggle dataset is not from a whole season. To test my thoughts, I calculated the number of unique game_ID.
+```{r}
+length(unique(data_2014$GAME_ID))
+```
+As we know that there is 30 teams in NBA and they all need to play 82 games for each regular season,and I calculated the total number of games for the whole season.
+```{r}
+30*82/2
+```
+So the data does not contain the whole season.  
+```{r}
+ggplot(data = score_top10)+
+  geom_col(aes(x=player_name,y=points,fill=player_name))
+```
+
+We can conclude that these 10 players' scoring abilities are similar in season 2014. In these 10 players, only Lebron James aldridge and vucevic are not guards, and all the other 7 players are guards. We can then conclude that small players are more likely to get higher score among excellent players. 
+
+My second goal is to analyse that whether there is a strong linear relationship between total score and number of shots.
+So we can set shots_num as the predictor and set points as the response
+```{r}
+relationship<-lm(player_table$points~player_table$shots_num,data = player_table)
+summary(relationship)
+```
+As we can see that the R-squared is 0.9693, which means the model can explain 96.93% data. So we can conclude that there is a strong linear relationship between number of shots and score.
+```{r}
+plot(player_table$shots_num,player_table$points)
+abline(relationship)
+```
+
+We can also get the same conclusion from this graph, as all the observations are close to the linear model.
+
+Next,I want to know the ratio of 3-pointer and 2-pointer for the top5 players mentioned before
+```{r}
+top_10<-filter(data_2014,
+               player_name=='mnta ellis'|
+               player_name=='lebron james'|
+               player_name=='klay thompson'|
+               player_name=='james harden'|
+               player_name=='stephen curry'|
+               player_name=='kyrie irving'|
+               player_name=='damian lillard'|
+               player_name=='lamarcus aldridge'|
+               player_name=='nikola vucevic'|
+               player_name=='chris paul')
+```
+
+```{r}
+top_10_made<-filter(top_10,top_10$FGM==1)
+```
+
+```{r}
+ggplot(data = top_10_made,aes(x=player_name,fill=factor(PTS)))+
+  geom_bar()+
+  coord_flip()
+```
+
+We can see that the ratio of made 2-pointer/3pointer for all the top 10 players are more than 1. Stephen Curry and Klay Thompson are more balanced between 2-pointer and 3-pointer
+
+My second data source is web-scraped from the website https://www.espn.com/nba/player.
+ 
+The table below contains the statistics about player "Lebron James" for his current season (first row) and his regular season career total (second row).
+```{r}
+link1<-"https://www.espn.com/nba/player/_/id/1966/lebron-james"%>%
+read_html()%>%
+  html_nodes("table")%>%
+  html_table(fill = TRUE)
+lebron_data<-link1[[3]]
+lebron_data
+```
+
+As this season is paused due to coronavirus, He played 60 games this season
+
+The table below is the first 5 rows of detail information for Lebron James for his 17 seasons, and the first row is for season 2003-2004.
+```{r}
+link2<-"https://www.espn.com/nba/player/stats/_/id/1966/lebron-james"%>%
+read_html()%>%
+  html_nodes("table")%>%
+  html_table(fill = TRUE)
+lebron_detail<-link2[[2]]
+head(lebron_detail,5)
+```
+
+
+```{r}
+lebron_detail<-lebron_detail[1:17,]
+lebron_detail$season_num<-1:17
+lebron_pts<-ggplot(data = lebron_detail)+
+  geom_line(aes(x=season_num,y=PTS))+
+  ggtitle("Lebron James career points")
+lebron_pts
+```
+
+We can see that Lebron James's scoring ability is significantly increasing in his first 5 seasons, and declines a little bit for next 5 years and be stable until now. It is very amazing to see a 35 year-old man's average score is higher than 25 points.
+```{r}
+lebron_ast<-ggplot(data = lebron_detail)+
+  geom_line(aes(x=season_num,y=AST))+
+  ggtitle("Lebron James career assists")
+lebron_ast
+```
+
+There is an interesting thing that Lebron James's assists is higher and higher as he becomes old. As he's average score being stable(conclusion from last graph), his ability to help teammates is even higher for a 35-year-old man!
+
+I like to compare some statistics between Lebron James and Stephen Curry, so I also scraped the data for Curry.
+```{r}
+link3<-"https://www.espn.com/nba/player/_/id/3975/stephen-curry"%>%
+  read_html()%>%
+  html_nodes("table")%>%
+  html_table(fill = TRUE)
+curry_data<-link3[[3]]
+curry_data
+```
+
+Due to injury, he only played 5 games this season. So it is not reasonable to compare the data for current season.
+
+The table below is the first 5 rows of detail information for Curry for his 11 seasons, and the first row is for season 2009-2010.
+```{r}
+link4<-"https://www.espn.com/nba/player/stats/_/id/3975/stephen-curry"%>%
+  read_html()%>%
+  html_nodes("table")%>%
+  html_table(fill = TRUE)
+curry_detail<-link4[[2]]
+head(curry_detail,5)
+```
+
+```{r}
+curry_detail<-curry_detail[1:11,]
+curry_detail$season_num<-1:11
+ggplot(data = curry_detail)+
+  geom_line(aes(x=season_num,y=PTS))+
+  ggtitle("Stephen Curry career points")
+```
+
+We can see that Curry's points is decreasing for the recent years, and this is because of his injury.People usually regard him as a historical scorer, however, half of his points data is below 25 points. And lebron James's points data are all above 25 points except his rookie season.
+```{r}
+ggplot() + 
+  geom_line(data = lebron_detail, aes(x = season_num, y = PTS), color = "blue") +
+  geom_line(data = curry_detail, aes(x = season_num, y = PTS), color = "red")+
+  ggtitle("Lebron vs Curry career points")
+```
+
+We can see that after Curry's 6th season, his scoring ability is almost same as Lebron corespondingly. However,the effect of his injury is severe to his points data. I hope he can recover as soon as possible and I hope the NBA will restart as soon as possible when we overcome the coronavirus.
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
